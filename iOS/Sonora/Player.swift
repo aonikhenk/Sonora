@@ -39,9 +39,8 @@ final class Player: ObservableObject {
     private var streamStatus: NSKeyValueObservation?
 
     init() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default)
-        try? session.setActive(true)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        Task { await Self.activateSession(rate: nil) }
 
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: nil)
@@ -174,7 +173,11 @@ final class Player: ObservableObject {
             let ok = track.isOneDrive ? await OneDriveCache.download(track) : await CloudFiles.ensureLocal(track.url)
             guard gen == generation else { return }
             isLoading = false
-            if ok, open(track, at: seconds, autoplay: isPlaying) {
+            guard ok, let opened = await open(track, at: seconds, autoplay: isPlaying, gen: gen) else {
+                if !ok && gen == generation { skip(from: i) }
+                return
+            }
+            if opened {
                 onTrackReady?(track)
                 prefetch(after: i)
             } else {
@@ -237,7 +240,11 @@ final class Player: ObservableObject {
             let ok = await OneDriveCache.download(track)
             guard gen == generation else { return }
             isLoading = false
-            if ok, open(track, at: position, autoplay: isPlaying) { onTrackReady?(track) } else { skip(from: i) }
+            guard ok, let opened = await open(track, at: position, autoplay: isPlaying, gen: gen) else {
+                if !ok && gen == generation { skip(from: i) }
+                return
+            }
+            if opened { onTrackReady?(track) } else { skip(from: i) }
         }
     }
 
@@ -251,21 +258,29 @@ final class Player: ObservableObject {
         streamObservers = []
     }
 
-    /// Abre el archivo ya disponible y lo reproduce.
-    private func open(_ track: Track, at seconds: Double, autoplay: Bool) -> Bool {
+    /// Activa la sesión de audio fuera del hilo principal (evita que la pantalla se congele).
+    nonisolated private static func activateSession(rate: Double?) async {
+        await Task.detached(priority: .userInitiated) {
+            let s = AVAudioSession.sharedInstance()
+            if let rate, s.sampleRate != rate { try? s.setPreferredSampleRate(rate) }
+            try? s.setActive(true)
+        }.value
+    }
+
+    /// Abre el archivo ya disponible y lo reproduce. Devuelve nil si mientras tanto se eligió otra canción.
+    private func open(_ track: Track, at seconds: Double, autoplay: Bool, gen: Int) async -> Bool? {
         do {
             let f = try AVAudioFile(forReading: track.url)
             let rate = f.fileFormat.sampleRate
-            file = f
-            fileDuration = Double(f.length) / rate
 
             // Pide al iPhone (o al DAC USB-C) la frecuencia nativa del archivo
-            let session = AVAudioSession.sharedInstance()
-            if session.sampleRate != rate {
+            if AVAudioSession.sharedInstance().sampleRate != rate {
                 if engine.isRunning { engine.stop() }
-                try? session.setPreferredSampleRate(rate)
-                try? session.setActive(true)
+                await Self.activateSession(rate: rate)
+                guard gen == generation else { return nil }
             }
+            file = f
+            fileDuration = Double(f.length) / rate
 
             engine.disconnectNodeOutput(node)
             engine.connect(node, to: engine.mainMixerNode, format: f.processingFormat)
@@ -354,8 +369,10 @@ final class Player: ObservableObject {
             if isPlaying { node.pause(); stream?.pause(); isPlaying = false; updateNowPlaying() }
         case .ended:
             if shouldResume && resumeAfterInterruption {
-                try? AVAudioSession.sharedInstance().setActive(true)
-                resume()
+                Task {
+                    await Self.activateSession(rate: nil)
+                    resume()
+                }
             }
             resumeAfterInterruption = false
         default: break
