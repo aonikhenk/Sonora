@@ -70,19 +70,22 @@ struct ArtworkView: View {
     let track: Track
 
     var body: some View {
-        Group {
-            if let img = library.artworkImage(forKey: track.albumKey) {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else {
-                ZStack {
-                    Theme.bar
-                    Image("Logo").resizable().scaledToFit().padding(90).opacity(0.5)
+        // Cuadro fijo del ancho de la pantalla; la imagen se ajusta dentro sin empujar el diseño
+        // (las carátulas que no son cuadradas desplazaban todo hacia un lado).
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                if let img = library.artworkImage(forKey: track.albumKey) {
+                    Image(uiImage: img).resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        Theme.bar
+                        Image("Logo").resizable().scaledToFit().padding(90).opacity(0.5)
+                    }
                 }
             }
-        }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
-        .clipped()
+            .clipped()
         .overlay {
             if player.isLoading {
                 ZStack {
