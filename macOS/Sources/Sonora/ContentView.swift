@@ -76,7 +76,7 @@ struct HeaderBar: View {
         HStack(spacing: 0) {
             Spacer()
             Text("Sonora")
-                .font(.custom("Snell Roundhand", size: 30).weight(.bold))
+                .font(.custom("Adelicia", size: 34))
                 .foregroundColor(.white)
                 .padding(.trailing, 12)
             Button { ui.floating.toggle() } label: {

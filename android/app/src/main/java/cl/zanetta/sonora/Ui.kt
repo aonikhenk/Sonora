@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -187,7 +188,7 @@ private fun Logo() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Image(painterResource(R.drawable.logo), "Sonora", Modifier.size(200.dp))
         Spacer(Modifier.height(12.dp))
-        Text("Sonora", color = Color.White.copy(alpha = 0.9f), fontSize = 34.sp, fontFamily = FontFamily.Cursive, fontWeight = FontWeight.Bold)
+        Text("Sonora", color = Color.White.copy(alpha = 0.9f), fontSize = 44.sp, fontFamily = FontFamily(Font(R.font.adelicia)))
     }
 }
 

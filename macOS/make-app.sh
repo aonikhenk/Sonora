@@ -10,6 +10,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Sonora "$APP/Contents/MacOS/Sonora"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Resources/Adelicia.ttf "$APP/Contents/Resources/Adelicia.ttf"
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -21,6 +22,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleIdentifier</key><string>com.sonora.player</string>
     <key>CFBundleExecutable</key><string>Sonora</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>ATSApplicationFontsPath</key><string>.</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1</string>
     <key>CFBundleVersion</key><string>1</string>

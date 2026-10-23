@@ -1,7 +1,7 @@
 {
   "name": "sonora",
   "productName": "Sonora",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reproductor de música minimalista: FLAC, ALAC, WAV, AIFF, MP3 con OneDrive",
   "author": "Enrique Zanetta",
   "license": "MIT",

@@ -58,7 +58,7 @@ struct LogoView: View {
                 .scaledToFit()
                 .frame(width: 190, height: 190)
             Text("Sonora")
-                .font(.custom("SnellRoundhand-Bold", size: 34))
+                .font(.custom("Adelicia", size: 40))
                 .foregroundColor(.white.opacity(0.9))
         }
     }

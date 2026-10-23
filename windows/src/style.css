@@ -1,5 +1,5 @@
-/* Pinyon Script (SIL Open Font License), parecida a Snell Roundhand de la versión Mac */
-@font-face { font-family: "Pinyon Script"; src: url("fonts/PinyonScript.woff2") format("woff2"); font-display: block; }
+/* Adelicia © Wahyu Studio — usada sin fines comerciales */
+@font-face { font-family: "Adelicia"; src: url("fonts/Adelicia.ttf") format("truetype"); font-display: block; }
 
 :root {
   --bg: #13152a;
@@ -27,7 +27,7 @@ svg { display: block; }
   height: 52px; display: flex; align-items: center; padding-left: 18px;
   -webkit-app-region: drag; background: var(--bg);
 }
-.brand { font: 400 36px "Pinyon Script", "Segoe Script", cursive; line-height: 1; padding-top: 4px; -webkit-text-stroke: 0.9px #fff; }
+.brand { font: 400 34px "Adelicia", "Segoe Script", cursive; line-height: 1; padding-top: 6px; -webkit-text-stroke: 0.5px #fff; }
 .spacer { flex: 1; }
 .hbtn {
   -webkit-app-region: no-drag; width: 46px; height: 52px; display: grid; place-items: center;
