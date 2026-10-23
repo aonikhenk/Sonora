@@ -13,3 +13,6 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Claves locales (Mac)
+macOS/Sources/Sonora/Secrets.swift

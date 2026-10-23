@@ -55,9 +55,15 @@ struct ContentView: View {
             return true
         }
         .onAppear {
-            let lib = library
-            player.artworkFor = { lib.artworkImage(forKey: $0.albumKey) }
+            let lib = library, pl = player
+            pl.artworkFor = { lib.artworkImage(forKey: $0.albumKey) }
+            pl.onTrackReady = { t in
+                Task { if let updated = await lib.readTags(t) { pl.replace(updated) } }
+            }
         }
+        .alert("Sonora", isPresented: Binding(get: { library.lastError != nil }, set: { if !$0 { library.lastError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(library.lastError ?? "") }
     }
 }
 
@@ -102,6 +108,15 @@ struct ArtworkPanel: View {
                 Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
             } else {
                 Placeholder()
+            }
+            if player.isLoading {
+                ZStack {
+                    Color.black.opacity(0.45)
+                    VStack(spacing: 10) {
+                        ProgressView().controlSize(.large)
+                        Text("Cargando desde OneDrive…").font(.system(size: 12)).foregroundColor(.white.opacity(0.85))
+                    }
+                }
             }
             if hovering && player.current != nil {
                 ControlsOverlay().transition(.opacity)
@@ -263,7 +278,21 @@ struct AlbumList: View {
     @EnvironmentObject var library: Library
     @EnvironmentObject var player: Player
     @EnvironmentObject var ui: UIState
+    @ObservedObject private var oneDrive = OneDrive.shared
     @State private var search = ""
+    @State private var choosingOneDrive = false
+
+    private func connectOneDrive() {
+        Task {
+            do {
+                try await oneDrive.signIn()
+                choosingOneDrive = true
+            } catch OneDriveError.cancelled {
+            } catch {
+                library.lastError = error.localizedDescription
+            }
+        }
+    }
 
     private var filtered: [Album] {
         guard !search.isEmpty else { return library.albums }
@@ -279,6 +308,27 @@ struct AlbumList: View {
                     ProgressView().controlSize(.small)
                     Text(library.status).font(.system(size: 10)).foregroundColor(Theme.dim).lineLimit(1)
                 }
+                Menu {
+                    if oneDrive.isSignedIn {
+                        Button(library.oneDriveFolder.map { "Carpeta: \($0.name)" } ?? "Elegir carpeta de música") { choosingOneDrive = true }
+                        Button("Actualizar OneDrive") { library.refreshOneDrive() }
+                        Divider()
+                        Button("Cerrar sesión (\(oneDrive.accountName ?? "OneDrive"))") {
+                            library.removeOneDrive()
+                            oneDrive.signOut()
+                        }
+                    } else {
+                        Button("Conectar OneDrive") { connectOneDrive() }
+                    }
+                } label: {
+                    Image(systemName: oneDrive.isSignedIn ? "cloud.fill" : "cloud")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .foregroundColor(.white.opacity(0.8))
+                .help("OneDrive")
+                .disabled(library.isScanning)
                 iconButton("plus", "Agregar carpeta") { ui.chooseFolders(into: library) }
                 iconButton("arrow.clockwise", "Volver a escanear") { library.rescan() }
             }
@@ -289,6 +339,8 @@ struct AlbumList: View {
                 VStack(spacing: 8) {
                     Image(systemName: "folder.badge.plus").font(.system(size: 30, weight: .light))
                     Text("Arrastra una carpeta con música sobre la ventana").font(.system(size: 12))
+                    Button("o conecta OneDrive") { oneDrive.isSignedIn ? (choosingOneDrive = true) : connectOneDrive() }
+                        .buttonStyle(.link).font(.system(size: 12))
                 }
                 .foregroundColor(Theme.dim)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -310,6 +362,12 @@ struct AlbumList: View {
                     }
                     .padding(.bottom, 8)
                 }
+            }
+        }
+        .sheet(isPresented: $choosingOneDrive) {
+            OneDriveFolderPicker { folder in
+                choosingOneDrive = false
+                library.useOneDrive(folder)
             }
         }
     }
@@ -362,11 +420,14 @@ struct AlbumDetail: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(album.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                     Text(album.artist).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(1)
-                    Text([album.year, "\(album.tracks.count) canciones", formatTime(album.totalDuration), album.qualityLabel]
+                    Text([album.year, "\(album.tracks.count) canciones",
+                          album.totalDuration > 0 ? formatTime(album.totalDuration) : nil, album.qualityLabel,
+                          album.isOneDrive ? "OneDrive" : nil]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 10)).foregroundColor(Theme.dim).lineLimit(1)
                 }
                 Spacer()
+                if album.isOneDrive { DownloadButton(album: album) }
                 Button { player.play(album.tracks, startAt: 0) } label: {
                     Image(systemName: "play.circle.fill").font(.system(size: 30)).foregroundColor(Theme.accent)
                 }
@@ -384,6 +445,121 @@ struct AlbumDetail: View {
                 }
                 .padding(.vertical, 4)
             }
+        }
+    }
+}
+
+// MARK: - Descargar álbum de OneDrive para escuchar sin internet
+
+struct DownloadButton: View {
+    @EnvironmentObject var library: Library
+    let album: Album
+    @State private var confirmRemove = false
+
+    private var saved: Int { album.tracks.filter { library.offline.contains($0.id) }.count }
+    private var complete: Bool { saved == album.tracks.count }
+
+    var body: some View {
+        let progress = library.downloads[album.id]
+        Button {
+            if complete { confirmRemove = true } else { library.download(album) }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7).fill(Theme.bar)
+                if let p = progress {
+                    Text("\(p.done)/\(p.total)").font(.system(size: 9, weight: .medium).monospacedDigit()).foregroundColor(.white)
+                } else {
+                    // La integral de Sonora + flecha (roja: descargar, verde: ya está en el Mac)
+                    Text("∫").font(.system(size: 24, weight: .light, design: .serif)).italic().foregroundColor(.white)
+                    Image(systemName: complete ? "checkmark" : "arrow.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(complete ? Color(red: 0.36, green: 0.82, blue: 0.55) : Color(red: 0.9, green: 0.28, blue: 0.3))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(3)
+                }
+            }
+            .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .disabled(progress != nil)
+        .help(progress != nil ? "Descargando…" : complete ? "Descargado: se escucha sin internet" :
+              saved > 0 ? "Descargadas \(saved) de \(album.tracks.count). Descargar el resto" : "Descargar para escuchar sin internet")
+        .confirmationDialog("Este álbum está en el Mac y se escucha sin internet. ¿Borrarlo del Mac? Seguirá disponible en OneDrive.",
+                            isPresented: $confirmRemove) {
+            Button("Borrar del Mac", role: .destructive) { library.removeDownload(album) }
+        }
+    }
+}
+
+// MARK: - Elegir carpeta de música en OneDrive
+
+struct OneDriveFolderPicker: View {
+    let onChoose: (OneDriveFolder) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            OneDriveFolderList(folder: nil, name: "OneDrive", onChoose: onChoose)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+                }
+        }
+        .frame(width: 380, height: 460)
+        .tint(Theme.accent)
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct OneDriveFolderList: View {
+    let folder: String?
+    let name: String
+    let onChoose: (OneDriveFolder) -> Void
+    @State private var items: [DriveItem] = []
+    @State private var loading = true
+    @State private var error: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            List {
+                if loading {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else if let error {
+                    Text(error).font(.system(size: 12)).foregroundColor(.red)
+                } else {
+                    let folders = items.filter { $0.folder != nil }
+                    let audio = items.filter { Scanner.extensions.contains(($0.name as NSString).pathExtension.lowercased()) }.count
+                    if folders.isEmpty {
+                        Text(audio > 0 ? "\(audio) canciones en esta carpeta" : "Sin subcarpetas")
+                            .font(.system(size: 12)).foregroundColor(Theme.dim)
+                    }
+                    ForEach(folders, id: \.id) { f in
+                        NavigationLink {
+                            OneDriveFolderList(folder: f.id, name: f.name, onChoose: onChoose)
+                        } label: {
+                            Label(f.name, systemImage: "folder")
+                        }
+                    }
+                }
+            }
+            if let folder {
+                Button {
+                    onChoose(OneDriveFolder(id: folder, name: name))
+                } label: {
+                    Text("Usar \"\(name)\" como biblioteca").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(12)
+            } else {
+                Text("Entra a tu carpeta de música y elígela abajo")
+                    .font(.system(size: 11)).italic().foregroundColor(Theme.dim).padding(12)
+            }
+        }
+        .navigationTitle(name)
+        .task {
+            do { items = try await OneDrive.shared.children(of: folder).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+            catch { self.error = error.localizedDescription }
+            loading = false
         }
     }
 }
@@ -412,7 +588,7 @@ struct TrackRow: View {
             Text(track.title).lineLimit(1)
                 .foregroundColor(isCurrent ? Theme.accent : .white)
             Spacer()
-            Text(formatTime(track.duration)).foregroundColor(Theme.dim).monospacedDigit()
+            Text(track.duration > 0 ? formatTime(track.duration) : "").foregroundColor(Theme.dim).monospacedDigit()
         }
         .font(.system(size: 12.5))
         .padding(.horizontal, 14).frame(height: 30)

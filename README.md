@@ -14,8 +14,9 @@ Reproductor de música minimalista para macOS, iPhone y Android: FLAC, ALAC, WAV
 | Etiquetas y carátulas | ✓ | ✓ | ✓ |
 | Biblioteca por álbumes → canciones | ✓ | ✓ | ✓ |
 | Frecuencia nativa del DAC | ✓ | ✓ (DAC USB-C) | según el equipo |
-| Agregar música | arrastrar carpeta | OneDrive, iCloud Drive, copiar | OneDrive, música del teléfono |
-| Streaming desde OneDrive con caché | — | ✓ | ✓ |
+| Agregar música | arrastrar carpeta, OneDrive | OneDrive, iCloud Drive, copiar | OneDrive, música del teléfono |
+| Streaming desde OneDrive con caché | ✓ | ✓ | ✓ |
+| Descargar álbumes para escuchar sin internet | ✓ | ✓ | ✓ |
 | Controles en pantalla bloqueada | ✓ | ✓ | ✓ |
 
 ## macOS
@@ -24,6 +25,7 @@ Requiere macOS 13+ y Xcode o las Command Line Tools.
 
 ```bash
 cd macOS
+cp Secrets.swift.example Sources/Sonora/Secrets.swift   # pon tu Id. de cliente de OneDrive
 ./make-app.sh
 ```
 

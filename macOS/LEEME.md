@@ -12,6 +12,11 @@ Crea `build/Sonora.app`. Arrástrala a Aplicaciones.
 
 También puedes abrir `Package.swift` en Xcode y presionar ▶︎.
 
+## OneDrive
+En la biblioteca toca la **nube** → **Conectar OneDrive** → elige tu carpeta de música.
+Las canciones suenan por streaming; con el botón **∫↓** de cada álbum se descargan al Mac para escuchar sin internet.
+Requiere `Sources/Sonora/Secrets.swift` (copia `Secrets.swift.example` y pon tu Id. de cliente).
+
 ## Uso
 - **Agregar música:** arrastra una carpeta (o archivos) sobre la ventana. También ⌘O.
 - **Biblioteca:** clic en el símbolo ♪ abajo a la izquierda → álbumes → clic en un álbum → canciones.
