@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.net.URL
 
@@ -219,53 +222,108 @@ object Library {
         busy.value = true
         status.value = "Leyendo OneDrive…"
         scope.launch {
+            val found = mutableListOf<Track>()
+            // carpeta → (imagen de portada, primera canción) para buscar carátulas después
+            val coverImage = mutableMapOf<String, DriveItem>()
+            val firstSong = mutableMapOf<String, String>()
             try {
-                val found = mutableListOf<Track>()
-                val covers = mutableMapOf<String, String>()
                 withContext(Dispatchers.IO) {
-                    val pending = ArrayDeque(listOf(root to emptyList<String>()))
-                    var folders = 0
-                    while (pending.isNotEmpty()) {
-                        val (folderId, path) = pending.removeFirst()
-                        val items = OneDrive.children(folderId)
-                        folders++
-                        status.value = "Leyendo OneDrive… $folders carpetas, ${found.size} canciones"
-                        val key = "od:$folderId"
-                        var cover: String? = null
-                        var thumb: String? = null
-                        for (item in items) {
-                            if (item.isFolder) { pending.add(item.id to path + item.name); continue }
-                            val ext = item.name.substringAfterLast('.', "").lowercase()
-                            if (ext in setOf("jpg", "jpeg", "png")) {
-                                val base = item.name.substringBeforeLast('.').lowercase()
-                                if (cover == null || base in setOf("cover", "folder", "front")) cover = item.downloadUrl
-                                continue
-                            }
-                            if (ext !in AUDIO_EXTENSIONS) continue
-                            found += trackFrom(item, ext, path, key)
-                            if (thumb == null) thumb = item.thumbnail
+                    val items = try {
+                        OneDrive.deltaTree(root) { n -> status.value = "Leyendo OneDrive… $n archivos" }
+                    } catch (e: Exception) {
+                        null   // algunas cuentas no permiten "delta": se recorre carpeta por carpeta
+                    }
+                    if (items != null) {
+                        val folders = items.filter { it.isFolder }.associateBy { it.id }
+                        val pathCache = mutableMapOf<String, List<String>>()
+                        fun pathOf(folderId: String?): List<String> {
+                            if (folderId == null || folderId == root) return emptyList()
+                            pathCache[folderId]?.let { return it }
+                            val f = folders[folderId] ?: return emptyList()
+                            return (pathOf(f.parentId) + f.name).also { pathCache[folderId] = it }
                         }
-                        (cover ?: thumb)?.let { if (!artFile(key).exists()) covers[key] = it }
+                        for (item in items) {
+                            if (item.isFolder || item.id == root) continue
+                            val folderId = item.parentId ?: root
+                            collect(item, folderId, pathOf(folderId), found, coverImage, firstSong)
+                        }
+                    } else {
+                        traverse(root, found, coverImage, firstSong)
                     }
                 }
                 oneDrive = found
                 save()
                 rebuild()
-                var i = 0
-                withContext(Dispatchers.IO) {
-                    for ((key, url) in covers) {
-                        i++
-                        status.value = "Carátulas $i de ${covers.size}…"
-                        runCatching { URL(url).openStream().use { s -> artFile(key).outputStream().use { s.copyTo(it) } } }
-                    }
-                }
+                downloadCovers(coverImage, firstSong)
                 rebuild()
             } catch (e: Exception) {
-                error.value = e.message ?: "Error leyendo OneDrive"
+                // Conserva lo que alcanzó a leerse
+                if (found.isNotEmpty()) { oneDrive = found; save(); rebuild() }
+                error.value = "No se pudo terminar de leer OneDrive: " + (e.message ?: "error de conexión") +
+                    if (found.isNotEmpty()) "\nSe cargaron ${found.size} canciones. Presiona Actualizar para reintentar." else ""
             }
             busy.value = false
             status.value = ""
         }
+    }
+
+    private fun collect(item: DriveItem, folderId: String, path: List<String>, found: MutableList<Track>,
+                        coverImage: MutableMap<String, DriveItem>, firstSong: MutableMap<String, String>) {
+        val key = "od:$folderId"
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        if (ext in setOf("jpg", "jpeg", "png")) {
+            val base = item.name.substringBeforeLast('.').lowercase()
+            if (key !in coverImage || base in setOf("cover", "folder", "front")) coverImage[key] = item
+            return
+        }
+        if (ext !in AUDIO_EXTENSIONS) return
+        found += trackFrom(item, ext, path, key)
+        firstSong.putIfAbsent(key, item.id)
+    }
+
+    /** Respaldo: recorre carpeta por carpeta, varias a la vez. */
+    private suspend fun traverse(root: String, found: MutableList<Track>, coverImage: MutableMap<String, DriveItem>,
+                                 firstSong: MutableMap<String, String>) = coroutineScope {
+        var level = listOf(root to emptyList<String>())
+        var done = 0
+        val lock = Any()
+        while (level.isNotEmpty()) {
+            val next = mutableListOf<Pair<String, List<String>>>()
+            level.chunked(6).forEach { chunk ->
+                chunk.map { (id, path) -> async(Dispatchers.IO) { Triple(id, path, OneDrive.children(id)) } }.awaitAll().forEach { (id, path, items) ->
+                    synchronized(lock) {
+                        for (item in items) {
+                            if (item.isFolder) next += item.id to (path + item.name)
+                            else collect(item, id, path, found, coverImage, firstSong)
+                        }
+                    }
+                    done++
+                    status.value = "Leyendo OneDrive… $done carpetas, ${found.size} canciones"
+                }
+            }
+            level = next
+        }
+    }
+
+    /** Carátulas de OneDrive: imagen de la carpeta o la incrustada en la primera canción (6 a la vez). */
+    private suspend fun downloadCovers(coverImage: Map<String, DriveItem>, firstSong: Map<String, String>) = coroutineScope {
+        val keys = (coverImage.keys + firstSong.keys).filter { !artFile(it).exists() }.distinct()
+        var done = 0
+        keys.chunked(6).forEach { chunk ->
+            chunk.map { key ->
+                async(Dispatchers.IO) {
+                    runCatching {
+                        val url = coverImage[key]?.let { OneDrive.downloadUrl(it.id) }
+                            ?: firstSong[key]?.let { OneDrive.thumbnailUrl(it) }
+                        if (url != null) URL(url).openStream().use { s -> artFile(key).outputStream().use { s.copyTo(it) } }
+                    }
+                }
+            }.awaitAll()
+            done += chunk.size
+            status.value = "Carátulas $done de ${keys.size}…"
+            if (done % 30 == 0) { artVersion.value++; rebuild() }
+        }
+        artVersion.value++
     }
 
     private fun trackFrom(item: DriveItem, ext: String, path: List<String>, key: String): Track {

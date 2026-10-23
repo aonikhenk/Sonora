@@ -13,6 +13,7 @@ import java.security.SecureRandom
 
 data class DriveItem(
     val id: String,
+    val parentId: String? = null,
     val name: String,
     val isFolder: Boolean,
     val downloadUrl: String?,
@@ -216,6 +217,41 @@ object OneDrive {
         }
         return out
     }
+
+    /**
+     * Todo el contenido de una carpeta y sus subcarpetas en pocas consultas (API "delta").
+     * Mucho más rápido que recorrer carpeta por carpeta.
+     */
+    fun deltaTree(folderId: String, onPage: (Int) -> Unit): List<DriveItem> {
+        var next: String? = "$GRAPH/me/drive/items/${Uri.encode(folderId)}/delta"
+        val out = mutableListOf<DriveItem>()
+        while (next != null) {
+            val page = getJson(next)
+            val arr = page.getJSONArray("value")
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                if (o.has("deleted")) continue
+                out += DriveItem(
+                    id = o.getString("id"),
+                    parentId = o.optJSONObject("parentReference")?.optString("id")?.ifEmpty { null },
+                    name = o.optString("name"),
+                    isFolder = o.has("folder"),
+                    downloadUrl = o.optString("@microsoft.graph.downloadUrl").ifEmpty { null },
+                    thumbnail = null,
+                    audio = o.optJSONObject("audio"),
+                )
+            }
+            onPage(out.size)
+            next = page.optString("@odata.nextLink").ifEmpty { null }
+        }
+        return out
+    }
+
+    /** Miniatura grande (carátula incrustada) de un archivo, si OneDrive la tiene. */
+    fun thumbnailUrl(itemId: String): String? = runCatching {
+        val set = getJson("$GRAPH/me/drive/items/${Uri.encode(itemId)}/thumbnails").getJSONArray("value").optJSONObject(0)
+        (set?.optJSONObject("large") ?: set?.optJSONObject("medium"))?.optString("url")?.ifEmpty { null }
+    }.getOrNull()
 
     /** Enlace directo de descarga (válido ~1 hora). */
     fun downloadUrl(itemId: String): String =

@@ -127,6 +127,21 @@ fun TvUi(activity: TvActivity) {
             }
         }
 
+        val crash = remember {
+            java.io.File(activity.filesDir, "crash.txt").takeIf { it.exists() }?.let { f -> f.readText().also { f.delete() } }
+        }
+        var showCrash by remember { mutableStateOf(crash != null) }
+        if (showCrash && crash != null) {
+            val lines = crash.lines()
+            val summary = (lines.take(3) + lines.filter { "cl.zanetta" in it || it.startsWith("Caused by") }.take(6)).joinToString("\n")
+            AlertDialog(
+                onDismissRequest = { showCrash = false },
+                confirmButton = { TextButton(onClick = { showCrash = false }) { Text("OK", fontSize = 18.sp) } },
+                title = { Text("La app se cerró la vez anterior") },
+                text = { Text("Saca una foto de este mensaje para corregirlo:\n\n$summary", fontSize = 13.sp, fontFamily = FontFamily.Monospace) },
+            )
+        }
+
         error?.let { msg ->
             AlertDialog(
                 onDismissRequest = { Library.error.value = null },
