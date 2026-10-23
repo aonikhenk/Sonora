@@ -1,3 +1,6 @@
+/* Pinyon Script (SIL Open Font License), parecida a Snell Roundhand de la versión Mac */
+@font-face { font-family: "Pinyon Script"; src: url("fonts/PinyonScript.woff2") format("woff2"); font-display: block; }
+
 :root {
   --bg: #13152a;
   --bar: #0f1019;
@@ -24,7 +27,7 @@ svg { display: block; }
   height: 52px; display: flex; align-items: center; padding-left: 18px;
   -webkit-app-region: drag; background: var(--bg);
 }
-.brand { font: 700 27px "Segoe Script", "Brush Script MT", cursive; letter-spacing: 0.5px; }
+.brand { font: 400 36px "Pinyon Script", "Segoe Script", cursive; line-height: 1; padding-top: 4px; -webkit-text-stroke: 0.9px #fff; }
 .spacer { flex: 1; }
 .hbtn {
   -webkit-app-region: no-drag; width: 46px; height: 52px; display: grid; place-items: center;
