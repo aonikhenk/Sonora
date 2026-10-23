@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0" stop-color="#F9F9F9"/>
+      <stop offset="0.55" stop-color="#E6EEF9"/>
+      <stop offset="1" stop-color="#ADD1F7"/>
+    </linearGradient>
+    <marker id="m" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M1,1 L8,5 L1,9" fill="none" stroke="#5B6AA8" stroke-width="1.6" stroke-dasharray="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="660" height="400" fill="url(#g)"/>
+  <path d="M262,180 Q330,150 398,180" fill="none" stroke="#5B6AA8" stroke-opacity="0.75" stroke-width="3"
+        stroke-linecap="round" stroke-dasharray="1 9"/>
+  <path d="M386,170 L399,181 L383,186" fill="none" stroke="#5B6AA8" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="330" y="330" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial" font-size="15"
+        fill="#3C4566" fill-opacity="0.75">Arrastra Sonora a la carpeta Aplicaciones</text>
+</svg>

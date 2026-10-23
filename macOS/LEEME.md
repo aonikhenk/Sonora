@@ -12,6 +12,9 @@ Crea `build/Sonora.app`. Arrástrala a Aplicaciones.
 
 También puedes abrir `Package.swift` en Xcode y presionar ▶︎.
 
+## Instalador (DMG)
+`./make-dmg.sh` crea `build/Sonora.dmg`: al abrirlo se ve Sonora y la carpeta Aplicaciones para arrastrar.
+
 ## OneDrive
 En la biblioteca toca la **nube** → **Conectar OneDrive** → elige tu carpeta de música.
 Las canciones suenan por streaming; con el botón **∫↓** de cada álbum se descargan al Mac para escuchar sin internet.
