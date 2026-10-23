@@ -37,6 +37,11 @@ object Library {
     fun init(context: Context) {
         app = context.applicationContext
         oneDrive = runCatching { Track.listFromJson(storeFile.readText()) }.getOrDefault(emptyList())
+        offline = runCatching {
+            val o = org.json.JSONObject(offlineFile.readText())
+            o.keys().asSequence().associateWith { o.getString(it) }
+        }.getOrDefault(emptyMap())
+        _offlineState.value = offline.keys
         rebuild()
         refreshLocal()
     }
@@ -48,6 +53,9 @@ object Library {
     fun refreshLocal() {
         scope.launch {
             local = withContext(Dispatchers.IO) { runCatching { queryMediaStore() }.getOrDefault(emptyList()) }
+            // Las canciones descargadas desde OneDrive no se muestran dos veces
+            val downloadedIds = offline.values.map { "ms:" + android.net.Uri.parse(it).lastPathSegment }.toSet()
+            local = local.filter { it.id !in downloadedIds }
             rebuild()
         }
     }
@@ -97,6 +105,104 @@ object Library {
         save()
         rebuild()
         refreshOneDrive()
+    }
+
+    // MARK: Descargas para escuchar sin internet (OneDrive → carpeta Música/Sonora del teléfono)
+
+    private var offline: Map<String, String> = emptyMap()          // id de canción OneDrive → content:// local
+    private val offlineFile get() = File(app.filesDir, "offline.json")
+    private val _offlineState = MutableStateFlow<Set<String>>(emptySet())
+    val offlineState: StateFlow<Set<String>> = _offlineState
+    /** Progreso de descarga por álbum: (listas, total). */
+    val downloads = MutableStateFlow<Map<String, Pair<Int, Int>>>(emptyMap())
+
+    /** Uri que se reproduce: la copia del teléfono si existe, si no OneDrive. */
+    fun playableUri(t: Track): String = offline[t.id] ?: t.uri
+
+    fun trackForPlayable(uri: String): Track? {
+        val id = offline.entries.firstOrNull { it.value == uri }?.key
+        return _albums.value.asSequence().flatMap { it.tracks }.firstOrNull { it.uri == uri || it.id == id }
+    }
+
+    fun offlineCount(album: Album) = album.tracks.count { it.id in _offlineState.value }
+
+    private fun saveOffline() {
+        runCatching { offlineFile.writeText(org.json.JSONObject(offline).toString()) }
+        _offlineState.value = offline.keys
+    }
+
+    fun download(album: Album) {
+        if (downloads.value.containsKey(album.key)) return
+        val todo = album.tracks.filter { it.isOneDrive && it.id !in offline }
+        if (todo.isEmpty()) return
+        downloads.value = downloads.value + (album.key to (0 to todo.size))
+        scope.launch {
+            var done = 0
+            var failed = 0
+            for (t in todo) {
+                val uri = withContext(Dispatchers.IO) { runCatching { saveToPhone(t) }.getOrNull() }
+                if (uri != null) {
+                    offline = offline + (t.id to uri)
+                    saveOffline()
+                } else failed++
+                done++
+                downloads.value = downloads.value + (album.key to (done to todo.size))
+            }
+            downloads.value = downloads.value - album.key
+            if (failed > 0) error.value = "No se pudieron descargar $failed canciones. Revisa la conexión e inténtalo de nuevo."
+        }
+    }
+
+    fun removeDownload(album: Album) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                for (t in album.tracks) offline[t.id]?.let { u ->
+                    runCatching {
+                        val uri = android.net.Uri.parse(u)
+                        if (uri.scheme == "file") File(uri.path!!).delete() else app.contentResolver.delete(uri, null, null)
+                    }
+                }
+            }
+            offline = offline - album.tracks.map { it.id }.toSet()
+            saveOffline()
+        }
+    }
+
+    private fun saveToPhone(t: Track): String {
+        val url = OneDrive.downloadUrl(t.id.removePrefix("od:"))
+        val safe = { s: String -> s.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "Sonora" } }
+        val name = "%02d - %s.%s".format(t.trackNumber, safe(t.title), t.format)
+        val mime = when (t.format) {
+            "flac" -> "audio/flac"; "mp3" -> "audio/mpeg"; "wav", "wave" -> "audio/wav"
+            "m4a", "alac", "aac" -> "audio/mp4"; "aif", "aiff" -> "audio/aiff"; "ogg", "opus" -> "audio/ogg"
+            else -> "audio/*"
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            val resolver = app.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, name)
+                put(MediaStore.Audio.Media.MIME_TYPE, mime)
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Sonora/${safe(t.artist)}/${safe(t.album)}")
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+                ?: throw OneDriveException("No se pudo crear el archivo")
+            try {
+                URL(url).openStream().use { input -> resolver.openOutputStream(uri)!!.use { input.copyTo(it, 256 * 1024) } }
+                values.clear()
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                return uri.toString()
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+        } else {
+            val dir = File(app.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC), "${safe(t.artist)}/${safe(t.album)}").apply { mkdirs() }
+            val f = File(dir, name)
+            URL(url).openStream().use { input -> f.outputStream().use { input.copyTo(it, 256 * 1024) } }
+            return android.net.Uri.fromFile(f).toString()
+        }
     }
 
     fun signOutOneDrive() {

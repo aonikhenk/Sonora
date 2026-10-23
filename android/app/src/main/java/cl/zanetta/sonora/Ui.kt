@@ -74,6 +74,8 @@ object Icons {
     val back = icon("M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
     val add = icon("M19,13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
     val folder = icon("M10,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2h-8l-2,-2z")
+    val down = icon("M20,12l-1.41,-1.41L13,16.17V4h-2v12.17l-5.58,-5.59L4,12l8,8 8,-8z")
+    val check = icon("M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z")
     val speaker = icon("M3,9v6h4l5,5V4L7,9H3zM16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02z")
 }
 
@@ -391,8 +393,14 @@ private fun AlbumScreen(activity: MainActivity, album: Album, onBack: () -> Unit
                         album.totalMs.takeIf { it > 0 }?.let(::formatTime), if (album.isOneDrive) "OneDrive" else null).joinToString(" · "),
                         color = Theme.dim, fontSize = 11.sp)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { activity.play(album, 0); onPlay() }) {
-                        Icon(Icons.play, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Reproducir")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { activity.play(album, 0); onPlay() }) {
+                            Icon(Icons.play, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Reproducir")
+                        }
+                        if (album.isOneDrive) {
+                            Spacer(Modifier.width(14.dp))
+                            DownloadButton(album)
+                        }
                     }
                 }
             }
@@ -413,6 +421,53 @@ private fun AlbumScreen(activity: MainActivity, album: Album, onBack: () -> Unit
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+}
+
+// MARK: - Descargar álbum al teléfono
+
+@Composable
+private fun DownloadButton(album: Album) {
+    val offline by Library.offlineState.collectAsState()
+    val downloads by Library.downloads.collectAsState()
+    val progress = downloads[album.key]
+    val saved = album.tracks.count { it.id in offline }
+    val complete = saved == album.tracks.size
+    var confirmRemove by remember { mutableStateOf(false) }
+
+    Box(
+        Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(Theme.bar)
+            .clickable(enabled = progress == null) { if (complete) confirmRemove = true else Library.download(album) },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (progress != null) {
+            CircularProgressIndicator(
+                progress = { if (progress.second > 0) progress.first.toFloat() / progress.second else 0f },
+                modifier = Modifier.size(40.dp), strokeWidth = 3.dp, color = Theme.accent, trackColor = Theme.line,
+            )
+            Text("${progress.first}/${progress.second}", color = Color.White, fontSize = 9.sp)
+        } else {
+            // La integral de Sonora + flecha (roja: descargar, verde: ya está en el teléfono)
+            Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(52.dp))
+            Icon(
+                if (complete) Icons.check else Icons.down, if (complete) "Descargado" else "Descargar",
+                tint = if (complete) Color(0xFF5BD18B) else Color(0xFFE5484D),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 3.dp, bottom = 3.dp).size(18.dp),
+            )
+        }
+    }
+    if (saved in 1 until album.tracks.size && progress == null) {
+        Text("$saved/${album.tracks.size}", color = Theme.dim, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
+    }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Álbum descargado") },
+            text = { Text("Está guardado en Música/Sonora del teléfono y se escucha sin internet. ¿Quieres borrarlo del teléfono? Seguirá disponible desde OneDrive.") },
+            confirmButton = { TextButton(onClick = { confirmRemove = false; Library.removeDownload(album) }) { Text("Borrar del teléfono") } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancelar") } },
+        )
     }
 }
 

@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
         val items = album.tracks.map { t ->
             val art = Library.artFile(t.albumKey).takeIf { it.exists() }?.let { Uri.fromFile(it) }
             MediaItem.Builder()
-                .setMediaId(t.uri)
+                .setMediaId(Library.playableUri(t))
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(t.title).setArtist(t.artist).setAlbumTitle(t.album)
@@ -159,7 +159,7 @@ class MainActivity : ComponentActivity() {
     private fun refresh() {
         val c = controller ?: return
         val id = c.currentMediaItem?.mediaId
-        val track = id?.let { uri -> Library.albums.value.asSequence().flatMap { it.tracks }.firstOrNull { it.uri == uri } }
+        val track = id?.let { Library.trackForPlayable(it) }
             ?: c.currentMediaItem?.mediaMetadata?.let { m ->
                 Track(id ?: "", id ?: "", m.title?.toString() ?: "", m.artist?.toString() ?: "", m.albumTitle?.toString() ?: "",
                     "", 0, 1, null, 0, "", "")
