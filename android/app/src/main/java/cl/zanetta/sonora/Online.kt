@@ -88,41 +88,58 @@ object Lyrics {
 
     /** Busca la letra (primero en caché). Bloqueante; usar en Dispatchers.IO. */
     fun fetch(t: Track, durationMs: Long): LyricsResult? {
-        val cache = File(dir, md5(t.id) + ".json")
-        if (cache.exists()) return runCatching { parse(JSONObject(cache.readText())) }.getOrNull()
-
-        val artist = t.artist.takeIf { it != "Artista desconocido" } ?: ""
-        val title = cleanForSearch(t.title, artist)
-        val album = cleanForSearch(t.album)
-        var found: JSONObject? = null
+        val cache = File(dir, "v2-" + md5(t.id) + ".json")
+        if (cache.exists()) {
+            val o = runCatching { JSONObject(cache.readText()) }.getOrNull()
+            // Si antes no se encontró, se vuelve a intentar después de 3 días
+            val stale = o?.optBoolean("notFound") == true && System.currentTimeMillis() - o.optLong("at") > 3L * 86_400_000
+            if (o != null && !stale) return parse(o)
+        }
 
         val secs = (durationMs / 1000).toInt()
-        if (artist.isNotBlank() && secs > 0) {
-            val (code, body) = httpGet("https://lrclib.net/api/get?artist_name=${Uri.encode(artist)}&track_name=${Uri.encode(title)}" +
-                "&album_name=${Uri.encode(album)}&duration=$secs")
-            if (code == 200) found = runCatching { JSONObject(body) }.getOrNull()
+        val found = search(t, secs) ?: run {
+            if (lastNetworkError) return null   // sin conexión: no guardar como "no encontrada"
+            JSONObject().put("notFound", true).put("at", System.currentTimeMillis())
         }
-        if (found == null) {
-            val q = buildString {
-                append("track_name=").append(Uri.encode(title))
-                if (artist.isNotBlank()) append("&artist_name=").append(Uri.encode(artist))
-            }
-            val (code, body) = httpGet("https://lrclib.net/api/search?$q")
-            if (code == 200) {
-                val arr = runCatching { JSONArray(body) }.getOrNull()
-                if (arr != null && arr.length() > 0) {
-                    val all = (0 until arr.length()).map { arr.getJSONObject(it) }
-                    // Prefiere letra sincronizada y duración parecida
-                    found = all.sortedWith(compareBy<JSONObject>(
-                        { it.optString("syncedLyrics").isBlank() },
-                        { if (secs > 0) kotlin.math.abs(it.optDouble("duration", 0.0) - secs) else 0.0 },
-                    )).first()
-                }
-            } else if (code !in 400..499) return null   // error de red: no guardar en caché
+        runCatching { cache.writeText(found.toString()) }
+        return parse(found)
+    }
+
+    private var lastNetworkError = false
+
+    /** Posibles (artista, canción): "Jeff Buckley - Hallelujah" en el título, o el artista de la etiqueta/carpeta. */
+    private fun candidates(t: Track): List<Pair<String, String>> {
+        val out = mutableListOf<Pair<String, String>>()
+        val title = cleanForSearch(t.title)
+        val parts = title.split(" - ").map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.size >= 2) out += parts[0] to parts.drop(1).joinToString(" - ")
+        val artist = t.artist.takeIf { it.isNotBlank() && it != "Artista desconocido" }
+        if (artist != null) out += artist to cleanForSearch(t.title, artist)
+        return out.distinct()
+    }
+
+    private fun search(t: Track, secs: Int): JSONObject? {
+        lastNetworkError = false
+        val pairs = candidates(t)
+        val results = mutableListOf<JSONObject>()
+        fun query(q: String) {
+            val r = runCatching { httpGet("https://lrclib.net/api/search?$q") }.getOrElse { lastNetworkError = true; return }
+            if (r.first != 200) { if (r.first >= 500) lastNetworkError = true; return }
+            val arr = runCatching { JSONArray(r.second) }.getOrNull() ?: return
+            for (i in 0 until arr.length()) results += arr.getJSONObject(i)
         }
-        val json = found ?: JSONObject().put("notFound", true)
-        runCatching { cache.writeText(json.toString()) }
-        return parse(json)
+        for ((artist, title) in pairs) {
+            query("track_name=${Uri.encode(title)}&artist_name=${Uri.encode(artist)}")
+            if (results.any { it.optString("syncedLyrics").isNotBlank() }) break
+        }
+        if (results.isEmpty()) query("q=${Uri.encode(pairs.firstOrNull()?.let { "${it.first} ${it.second}" } ?: cleanForSearch(t.title))}")
+        if (results.isEmpty()) return null
+        if (results.isNotEmpty()) lastNetworkError = false
+        // Prefiere letra sincronizada y duración parecida a la canción
+        return results.sortedWith(compareBy<JSONObject>(
+            { it.optString("syncedLyrics").isBlank() || it.optString("syncedLyrics") == "null" },
+            { if (secs > 0) kotlin.math.abs(it.optDouble("duration", 0.0) - secs) else 0.0 },
+        )).first()
     }
 
     private fun parse(o: JSONObject): LyricsResult? {

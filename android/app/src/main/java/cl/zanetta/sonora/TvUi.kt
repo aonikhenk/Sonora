@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -100,29 +101,33 @@ fun TvUi(activity: TvActivity) {
         }
 
         Box(Modifier.fillMaxSize().background(Theme.bg)) {
+            @Composable fun Branded(content: @Composable () -> Unit) = Column(Modifier.fillMaxSize()) {
+                TvBrandBar(Modifier.padding(start = 56.dp, top = 24.dp))
+                Box(Modifier.weight(1f)) { content() }
+            }
             when (val s = screen) {
                 TvScreen.Home -> TvHome(activity, lyricsOn, onLyrics = { lyricsOn = !lyricsOn },
                     onLibrary = { screen = TvScreen.Library }, onOneDrive = { screen = if (OneDrive.isSignedIn) TvScreen.Picker(listOf(null to "OneDrive")) else TvScreen.Login })
                 TvScreen.Library -> {
                     BackHandler { screen = TvScreen.Home }
-                    TvLibrary(onBack = { screen = TvScreen.Home }, onAlbum = { screen = TvScreen.AlbumDetail(it) },
-                        onLogin = { screen = TvScreen.Login }, onPicker = { screen = TvScreen.Picker(listOf(null to "OneDrive")) })
+                    Branded { TvLibrary(onBack = { screen = TvScreen.Home }, onAlbum = { screen = TvScreen.AlbumDetail(it) },
+                        onLogin = { screen = TvScreen.Login }, onPicker = { screen = TvScreen.Picker(listOf(null to "OneDrive")) }) }
                 }
                 is TvScreen.AlbumDetail -> {
                     BackHandler { screen = TvScreen.Library }
                     val album = albums.firstOrNull { it.key == s.key }
                     if (album == null) LaunchedEffect(Unit) { screen = TvScreen.Library }
-                    else TvAlbum(activity, album, onPlay = { screen = TvScreen.Home })
+                    else Branded { TvAlbum(activity, album, onPlay = { screen = TvScreen.Home }) }
                 }
                 TvScreen.Login -> {
                     BackHandler { screen = TvScreen.Library }
-                    TvLogin(onDone = { screen = TvScreen.Picker(listOf(null to "OneDrive")) }, onCancel = { screen = TvScreen.Library })
+                    Branded { TvLogin(onDone = { screen = TvScreen.Picker(listOf(null to "OneDrive")) }, onCancel = { screen = TvScreen.Library }) }
                 }
                 is TvScreen.Picker -> {
                     val pop = { screen = if (s.stack.size > 1) TvScreen.Picker(s.stack.dropLast(1)) else TvScreen.Library }
                     BackHandler { pop() }
-                    TvPicker(s.stack.last(), onOpen = { id, name -> screen = TvScreen.Picker(s.stack + (id to name)) },
-                        onChoose = { id, name -> Library.useOneDriveFolder(id, name); screen = TvScreen.Library })
+                    Branded { TvPicker(s.stack.last(), onOpen = { id, name -> screen = TvScreen.Picker(s.stack + (id to name)) },
+                        onChoose = { id, name -> Library.useOneDriveFolder(id, name); screen = TvScreen.Library }) }
                 }
             }
         }
@@ -185,16 +190,18 @@ private fun TvButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
         ) {
             val fg = if (focused || primary) Theme.bg else Color.White
             if (icon != null) { Icon(icon, null, Modifier.size(22.dp), tint = fg); Spacer(Modifier.width(10.dp)) }
-            Text(text, color = fg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = fg, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
         }
     }
 }
 
 @Composable
-private fun RoundControl(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, size: Dp, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RoundControl(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, size: Dp, onClick: () -> Unit,
+                         modifier: Modifier = Modifier, active: Boolean = false) {
     Focusable(onClick, modifier, RoundedCornerShape(50), focusedScale = 1.12f) { focused ->
-        Box(Modifier.size(size).background(if (focused) Color.White else Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
-            Icon(icon, desc, Modifier.size(size * 0.5f), tint = if (focused) Theme.bg else Color.White)
+        Box(Modifier.size(size).background(when { focused -> Color.White; active -> Theme.accent; else -> Color.White.copy(alpha = 0.08f) }),
+            contentAlignment = Alignment.Center) {
+            Icon(icon, desc, Modifier.size(size * 0.5f), tint = if (focused || active) Theme.bg else Color.White)
         }
     }
 }
@@ -221,56 +228,94 @@ private fun TvHome(activity: TvActivity, lyricsOn: Boolean, onLyrics: () -> Unit
         return
     }
     val art = rememberTvArtwork(t.albumKey)
+    TvNowPlaying(
+        np = np, t = t, art = art, lyricsOn = lyricsOn,
+        position = { activity.hub.position() },
+        onPrev = { activity.hub.previous() }, onToggle = { activity.hub.togglePlay() }, onNext = { activity.hub.next() },
+        onSeekBy = { activity.hub.seekBy(it) }, onLyrics = onLyrics, onLibrary = onLibrary,
+    )
+}
+
+/** Logo y nombre, siempre visibles arriba a la izquierda. */
+@Composable
+fun TvBrandBar(modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.logo), null, Modifier.size(46.dp))
+        Spacer(Modifier.width(12.dp))
+        Text("Sonora", color = Color.White, fontSize = 40.sp, fontFamily = Adelicia)
+    }
+}
+
+/** Pantalla de reproducción (sin dependencias del reproductor, para poder probarla). */
+@Composable
+fun TvNowPlaying(
+    np: NowPlaying,
+    t: Track,
+    art: ImageBitmap?,
+    lyricsOn: Boolean,
+    position: () -> Long,
+    onPrev: () -> Unit,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onSeekBy: (Long) -> Unit,
+    onLyrics: () -> Unit,
+    onLibrary: () -> Unit,
+    lyricsOverride: LyricsResult? = null,
+) {
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(t.id) { runCatching { playFocus.requestFocus() } }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().background(Theme.bg)) {
         // Fondo: la carátula ampliada y desenfocada
         if (art != null) {
             Image(art, null, Modifier.fillMaxSize().then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(60.dp) else Modifier),
-                contentScale = ContentScale.Crop, alpha = if (Build.VERSION.SDK_INT >= 31) 0.55f else 0.18f)
+                contentScale = ContentScale.Crop, alpha = if (Build.VERSION.SDK_INT >= 31) 0.5f else 0.15f)
         }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.35f), Theme.bg.copy(alpha = 0.92f)))))
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.35f), Theme.bg.copy(alpha = 0.9f)))))
 
-        Row(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Carátula
-            Box(Modifier.fillMaxHeight(0.86f).aspectRatio(1f).shadow(30.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)).background(Theme.bar),
-                contentAlignment = Alignment.Center) {
-                if (art != null) Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                else Image(painterResource(R.drawable.logo), null, Modifier.fillMaxSize(0.5f), alpha = 0.6f)
-                if (np.buffering) {
-                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White)
+        Column(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 28.dp)) {
+            TvBrandBar()
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                // Carátula: tan alta como el espacio disponible
+                Box(Modifier.fillMaxHeight().aspectRatio(1f).shadow(30.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)).background(Theme.bar),
+                    contentAlignment = Alignment.Center) {
+                    if (art != null) Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    else Image(painterResource(R.drawable.logo), null, Modifier.fillMaxSize(0.5f), alpha = 0.6f)
+                    if (np.buffering) {
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color.White)
+                        }
                     }
                 }
-            }
-            Spacer(Modifier.width(48.dp))
+                Spacer(Modifier.width(48.dp))
 
-            Column(Modifier.weight(1f).fillMaxHeight(0.86f)) {
-                if (np.quality.isNotEmpty()) {
-                    Text(np.quality, color = Theme.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(8.dp))
-                }
-                Text(t.title, color = Color.White, fontSize = if (lyricsOn) 26.sp else 38.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(6.dp))
-                Text(listOf(t.artist, t.album).filter { it.isNotBlank() }.joinToString(" · "), color = Theme.dim,
-                    fontSize = if (lyricsOn) 17.sp else 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    if (np.quality.isNotEmpty()) {
+                        Text(np.quality, color = Theme.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(t.title, color = Color.White, fontSize = if (lyricsOn) 26.sp else 38.sp, fontWeight = FontWeight.Bold,
+                        lineHeight = if (lyricsOn) 32.sp else 44.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(6.dp))
+                    Text(listOf(t.artist, t.album).filter { it.isNotBlank() }.joinToString(" · "), color = Theme.dim,
+                        fontSize = if (lyricsOn) 17.sp else 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-                Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 16.dp)) {
-                    if (lyricsOn) LyricsPanel(activity, t, np)
-                }
+                    // Zona de la letra: ocupa todo el espacio libre entre el título y los controles
+                    Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 14.dp)) {
+                        if (lyricsOn) LyricsPanel(t, np, position, lyricsOverride)
+                    }
 
-                TvProgress(activity, np)
-                Spacer(Modifier.height(18.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    RoundControl(Icons.prev, "Anterior", 64.dp, { activity.hub.previous() })
-                    RoundControl(if (np.isPlaying) Icons.pause else Icons.play, "Reproducir", 80.dp, { activity.hub.togglePlay() },
-                        Modifier.focusRequester(playFocus))
-                    RoundControl(Icons.next, "Siguiente", 64.dp, { activity.hub.next() })
-                    Spacer(Modifier.width(16.dp))
-                    TvButton(if (lyricsOn) "Ocultar letra" else "Letra", onLyrics)
-                    TvButton("Biblioteca", onLibrary, icon = Icons.note)
+                    TvProgress(np, onSeekBy, onToggle)
+                    Spacer(Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RoundControl(Icons.prev, "Anterior", 54.dp, onPrev)
+                        RoundControl(if (np.isPlaying) Icons.pause else Icons.play, "Reproducir", 68.dp, onToggle, Modifier.focusRequester(playFocus))
+                        RoundControl(Icons.next, "Siguiente", 54.dp, onNext)
+                        Spacer(Modifier.weight(1f))
+                        RoundControl(Icons.lyrics, if (lyricsOn) "Ocultar letra" else "Letra", 54.dp, onLyrics, active = lyricsOn)
+                        RoundControl(Icons.note, "Biblioteca", 54.dp, onLibrary)
+                    }
                 }
             }
         }
@@ -278,7 +323,7 @@ private fun TvHome(activity: TvActivity, lyricsOn: Boolean, onLyrics: () -> Unit
 }
 
 @Composable
-private fun TvProgress(activity: TvActivity, np: NowPlaying) {
+private fun TvProgress(np: NowPlaying, onSeekBy: (Long) -> Unit, onToggle: () -> Unit) {
     val frac = if (np.durationMs > 0) (np.positionMs.toFloat() / np.durationMs).coerceIn(0f, 1f) else 0f
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -288,12 +333,12 @@ private fun TvProgress(activity: TvActivity, np: NowPlaying) {
                 .onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (e.key) {
-                        Key.DirectionLeft -> { activity.hub.seekBy(-10_000); true }
-                        Key.DirectionRight -> { activity.hub.seekBy(10_000); true }
+                        Key.DirectionLeft -> { onSeekBy(-10_000); true }
+                        Key.DirectionRight -> { onSeekBy(10_000); true }
                         else -> false
                     }
                 }
-                .clickable(interactionSource = interaction, indication = null) { activity.hub.togglePlay() }
+                .clickable(interactionSource = interaction, indication = null) { onToggle() }
         ) {
             val h = if (focused) 8f else 5f
             val y = size.height / 2
@@ -327,9 +372,10 @@ private fun TvIdle(onLibrary: () -> Unit, onOneDrive: () -> Unit) {
 // MARK: - Letras sincronizadas (LRCLIB)
 
 @Composable
-private fun LyricsPanel(activity: TvActivity, t: Track, np: NowPlaying) {
+private fun LyricsPanel(t: Track, np: NowPlaying, position: () -> Long, override: LyricsResult? = null) {
     val known = np.durationMs > 0
-    val lyrics by produceState<LyricsResult?>(null, t.id, known) {
+    val lyrics by produceState(override, t.id, known) {
+        if (override != null) return@produceState
         value = null
         value = withContext(Dispatchers.IO) { runCatching { Lyrics.fetch(t, np.durationMs) }.getOrNull() } ?: LyricsResult(null, null)
     }
@@ -337,24 +383,24 @@ private fun LyricsPanel(activity: TvActivity, t: Track, np: NowPlaying) {
     when {
         l == null -> Text("Buscando letra…", color = Theme.dim, fontSize = 22.sp)
         l.instrumental -> Text("Instrumental", color = Theme.dim, fontSize = 26.sp)
-        !l.synced.isNullOrEmpty() -> SyncedLyrics(activity, l.synced)
+        !l.synced.isNullOrEmpty() -> SyncedLyrics(position, l.synced)
         !l.plain.isNullOrBlank() -> PlainLyrics(l.plain, np)
-        else -> Text("No se encontró la letra de esta canción.", color = Theme.dim, fontSize = 22.sp)
+        else -> Text("No se encontró la letra de esta canción en LRCLIB.", color = Theme.dim, fontSize = 22.sp)
     }
 }
 
 @Composable
-private fun SyncedLyrics(activity: TvActivity, lines: List<LyricLine>) {
-    var pos by remember { mutableLongStateOf(activity.hub.position()) }
+private fun SyncedLyrics(position: () -> Long, lines: List<LyricLine>) {
+    var pos by remember { mutableLongStateOf(position()) }
     LaunchedEffect(lines) {
         while (isActive) {
-            pos = activity.hub.position()
+            pos = position()
             delay(120)
         }
     }
     val current = lines.indexOfLast { it.timeMs <= pos + 150 }.coerceAtLeast(0)
     val state = rememberLazyListState()
-    LaunchedEffect(current) { state.animateScrollToItem((current - 2).coerceAtLeast(0)) }
+    LaunchedEffect(current) { state.animateScrollToItem((current - 1).coerceAtLeast(0)) }
     LazyColumn(state = state, userScrollEnabled = false, modifier = Modifier.fillMaxSize()) {
         itemsIndexed(lines) { i, line ->
             val active = i == current
@@ -365,10 +411,10 @@ private fun SyncedLyrics(activity: TvActivity, lines: List<LyricLine>) {
                     i < current -> Color.White.copy(alpha = 0.35f)
                     else -> Color.White.copy(alpha = 0.55f)
                 },
-                fontSize = if (active) 32.sp else 24.sp,
+                fontSize = if (active) 28.sp else 21.sp,
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                lineHeight = if (active) 40.sp else 32.sp,
-                modifier = Modifier.padding(vertical = 7.dp),
+                lineHeight = if (active) 35.sp else 28.sp,
+                modifier = Modifier.padding(vertical = 5.dp),
             )
         }
         item { Spacer(Modifier.height(200.dp)) }
@@ -408,10 +454,12 @@ private fun TvLibrary(onBack: () -> Unit, onAlbum: (String) -> Unit, onLogin: ()
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     val signedIn = remember(albums, busy) { OneDrive.isSignedIn }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Biblioteca", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
+    Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Biblioteca", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(28.dp))
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.End)) {
             TvButton("Volver", onBack, Modifier.focusRequester(first), icon = Icons.back)
             if (signedIn) {
                 TvButton(OneDrive.folderName?.let { "OneDrive: $it" } ?: "Elegir carpeta", onPicker, icon = Icons.folder)
@@ -419,6 +467,7 @@ private fun TvLibrary(onBack: () -> Unit, onAlbum: (String) -> Unit, onLogin: ()
             } else TvButton("Conectar OneDrive", onLogin, primary = true, icon = Icons.folder)
             TvButton("Este dispositivo", deviceMusic)
             if (Discogs.isConfigured) TvButton("Carátulas HD", { Library.fetchDiscogsCovers(all = true) })
+            }
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

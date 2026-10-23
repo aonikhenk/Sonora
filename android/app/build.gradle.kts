@@ -19,8 +19,8 @@ android {
         applicationId = "cl.zanetta.sonora"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.3.2"
+        versionCode = 9
+        versionName = "0.3.3"
         buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${local.getProperty("onedrive.clientId", "")}\"")
         buildConfigField("String", "DISCOGS_TOKEN", "\"${local.getProperty("discogs.token", "")}\"")
     }
@@ -51,6 +51,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+                it.systemProperty("roborazzi.test.record", "true")
+            }
+        }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -75,4 +84,12 @@ dependencies {
     implementation("androidx.media3:media3-datasource:$media3")
     implementation("androidx.media3:media3-database:$media3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
+
+    // Pruebas visuales (capturas de la pantalla de TV sin dispositivo)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.40.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.40.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
