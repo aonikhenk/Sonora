@@ -44,6 +44,12 @@ class SonoraApp : Application() {
     }
 }
 
+fun isTelevision(context: android.content.Context): Boolean {
+    val ui = context.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
+    return ui.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+        context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+}
+
 class MainActivity : ComponentActivity() {
     private val hub = PlayerHub()
     val nowPlaying get() = hub.nowPlaying
@@ -65,6 +71,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // En un televisor, siempre la versión de TV (horizontal, pantalla completa, inicio de sesión con código)
+        if (isTelevision(this)) {
+            startActivity(Intent(this, TvActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            finish()
+            return
+        }
         enableEdgeToEdge()
         java.io.File(filesDir, "crash.txt").takeIf { it.exists() }?.let {
             crashReport.value = it.readText()

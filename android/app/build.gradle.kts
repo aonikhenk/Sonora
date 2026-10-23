@@ -19,8 +19,8 @@ android {
         applicationId = "cl.zanetta.sonora"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3"
+        versionCode = 7
+        versionName = "0.3.1"
         buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${local.getProperty("onedrive.clientId", "")}\"")
         buildConfigField("String", "DISCOGS_TOKEN", "\"${local.getProperty("discogs.token", "")}\"")
     }
