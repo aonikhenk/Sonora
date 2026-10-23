@@ -262,8 +262,56 @@ enum OneDriveCache {
         return d
     }()
 
+    /// Canciones descargadas para escuchar sin internet (no se borran solas ni van al respaldo de iCloud).
+    static var offlineDir: URL = {
+        var d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Offline", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        var v = URLResourceValues()
+        v.isExcludedFromBackup = true
+        try? d.setResourceValues(v)
+        return d
+    }()
+
+    private static func fileName(_ itemID: String, _ ext: String) -> String {
+        itemID.replacingOccurrences(of: "!", with: "_") + "." + (ext == "alac" ? "m4a" : ext)
+    }
+    static func cacheURL(itemID: String, ext: String) -> URL { dir.appendingPathComponent(fileName(itemID, ext)) }
+    static func offlineURL(itemID: String, ext: String) -> URL { offlineDir.appendingPathComponent(fileName(itemID, ext)) }
+
+    /// Archivo a reproducir: la copia descargada si existe; si no, el caché.
     static func url(itemID: String, ext: String) -> URL {
-        dir.appendingPathComponent(itemID.replacingOccurrences(of: "!", with: "_") + "." + (ext == "alac" ? "m4a" : ext))
+        let o = offlineURL(itemID: itemID, ext: ext)
+        return FileManager.default.fileExists(atPath: o.path) ? o : cacheURL(itemID: itemID, ext: ext)
+    }
+
+    static func isOffline(_ t: Track) -> Bool {
+        FileManager.default.fileExists(atPath: offlineURL(itemID: t.path, ext: t.format).path)
+    }
+
+    /// Guarda la canción de forma permanente (reutiliza el caché si ya estaba).
+    static func makeOffline(_ t: Track) async -> Bool {
+        let dest = offlineURL(itemID: t.path, ext: t.format)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: dest.path) { return true }
+        let cached = cacheURL(itemID: t.path, ext: t.format)
+        if fm.fileExists(atPath: cached.path), (try? fm.copyItem(at: cached, to: dest)) != nil { return true }
+        do {
+            let src = try await OneDrive.shared.downloadURL(itemID: t.path)
+            let (tmp, resp) = try await URLSession.shared.download(from: src)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return false }
+            try? fm.removeItem(at: dest)
+            try fm.moveItem(at: tmp, to: dest)
+            return true
+        } catch { return false }
+    }
+
+    static func removeOffline(_ t: Track) {
+        try? FileManager.default.removeItem(at: offlineURL(itemID: t.path, ext: t.format))
+    }
+
+    static func clearOffline() {
+        try? FileManager.default.removeItem(at: offlineDir)
+        try? FileManager.default.createDirectory(at: offlineDir, withIntermediateDirectories: true)
     }
 
     static func isCached(_ t: Track) -> Bool { FileManager.default.fileExists(atPath: t.url.path) }

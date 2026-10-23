@@ -15,6 +15,12 @@ final class Library: ObservableObject {
     @Published private(set) var status = ""
     @Published private(set) var oneDriveFolder: OneDriveFolder?
     @Published var lastError: String?
+    /// Canciones de OneDrive descargadas al iPhone.
+    @Published private(set) var offline: Set<String> = []
+    /// Progreso de descarga por álbum.
+    @Published private(set) var downloads: [String: DownloadProgress] = [:]
+
+    struct DownloadProgress: Equatable { var done: Int; var total: Int }
 
     private var tracks: [String: Track] = [:]
     private var artwork: [String: String] = [:]          // albumKey -> archivo en caché
@@ -115,6 +121,7 @@ final class Library: ObservableObject {
         oneDriveFolder = nil
         tracks = tracks.filter { !$0.value.isOneDrive }
         OneDriveCache.clear()
+        OneDriveCache.clearOffline()
         rebuild()
         save()
     }
@@ -204,6 +211,35 @@ final class Library: ObservableObject {
             source: Track.oneDrive,
             groupKey: groupKey
         )
+    }
+
+    // MARK: Descargar para escuchar sin internet
+
+    func download(_ album: Album) {
+        guard downloads[album.id] == nil else { return }
+        let todo = album.tracks.filter { $0.isOneDrive && !offline.contains($0.id) }
+        guard !todo.isEmpty else { return }
+        downloads[album.id] = DownloadProgress(done: 0, total: todo.count)
+        Task {
+            var failed = 0
+            for (i, t) in todo.enumerated() {
+                if await OneDriveCache.makeOffline(t) { offline.insert(t.id) } else { failed += 1 }
+                downloads[album.id] = DownloadProgress(done: i + 1, total: todo.count)
+            }
+            downloads[album.id] = nil
+            if failed > 0 { lastError = "No se pudieron descargar \(failed) canciones. Revisa la conexión e inténtalo de nuevo." }
+        }
+    }
+
+    func removeDownload(_ album: Album) {
+        for t in album.tracks where t.isOneDrive {
+            OneDriveCache.removeOffline(t)
+            offline.remove(t.id)
+        }
+    }
+
+    private func refreshOffline() {
+        offline = Set(tracks.values.filter { $0.isOneDrive && OneDriveCache.isOffline($0) }.map(\.id))
     }
 
     // MARK: Copiar al iPhone (opcional)
@@ -322,6 +358,7 @@ final class Library: ObservableObject {
     }
 
     private func rebuild() {
+        refreshOffline()
         albums = Dictionary(grouping: tracks.values, by: \.albumKey)
             .map { key, ts in
                 Album(id: key, tracks: ts.sorted {

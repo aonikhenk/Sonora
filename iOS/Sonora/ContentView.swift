@@ -441,6 +441,23 @@ struct TrackList: View {
                       album.qualityLabel, album.isCloud ? (album.tracks.first?.isOneDrive == true ? "OneDrive" : "en la nube") : nil]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.system(size: 11)).foregroundColor(Theme.dim)
+                HStack(spacing: 14) {
+                    Button {
+                        player.play(album.tracks, startAt: 0)
+                        onPlay()
+                    } label: {
+                        Label("Reproducir", systemImage: "play.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .padding(.horizontal, 22).padding(.vertical, 12)
+                            .background(Theme.accent, in: Capsule())
+                            .foregroundColor(Theme.bg)
+                    }
+                    .buttonStyle(.plain)
+                    if album.tracks.first?.isOneDrive == true {
+                        DownloadButton(album: album)
+                    }
+                }
+                .padding(.top, 6)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -492,6 +509,53 @@ struct TrackList: View {
                 library.delete(album)
                 dismiss()
             }
+        }
+    }
+}
+
+// MARK: - Descargar álbum para escuchar sin internet
+
+struct DownloadButton: View {
+    @EnvironmentObject var library: Library
+    let album: Album
+    @State private var confirmRemove = false
+
+    private var saved: Int { album.tracks.filter { library.offline.contains($0.id) }.count }
+    private var complete: Bool { saved == album.tracks.count }
+
+    var body: some View {
+        let progress = library.downloads[album.id]
+        Button {
+            if complete { confirmRemove = true } else { library.download(album) }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(Theme.bar)
+                if let p = progress {
+                    ProgressView(value: Double(p.done), total: Double(max(p.total, 1)))
+                        .progressViewStyle(.circular).tint(Theme.accent)
+                    Text("\(p.done)/\(p.total)").font(.system(size: 9, weight: .medium)).foregroundColor(.white).offset(y: 18)
+                } else {
+                    // La integral de Sonora + flecha (roja: descargar, verde: ya está en el iPhone)
+                    Image("Glyph").resizable().scaledToFit()
+                    Image(systemName: complete ? "checkmark" : "arrow.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(complete ? Color(red: 0.36, green: 0.82, blue: 0.55) : Color(red: 0.9, green: 0.28, blue: 0.3))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(5)
+                }
+            }
+            .frame(width: 48, height: 48)
+        }
+        .buttonStyle(.plain)
+        .disabled(progress != nil)
+        .overlay(alignment: .trailing) {
+            if saved > 0 && !complete && progress == nil {
+                Text("\(saved)/\(album.tracks.count)").font(.system(size: 10)).foregroundColor(Theme.dim).fixedSize().offset(x: 34)
+            }
+        }
+        .confirmationDialog("Este álbum está en el iPhone y se escucha sin internet. ¿Borrarlo del iPhone? Seguirá disponible en OneDrive.",
+                            isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button("Borrar del iPhone", role: .destructive) { library.removeDownload(album) }
         }
     }
 }
