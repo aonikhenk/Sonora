@@ -27,6 +27,17 @@ import kotlinx.coroutines.withContext
 class SonoraApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Guarda cualquier cierre inesperado para mostrarlo al volver a abrir la app
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching {
+                java.io.File(filesDir, "crash.txt").writeText(
+                    "Sonora ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MODEL}\n" +
+                        "Hilo: ${thread.name}\n\n" + android.util.Log.getStackTraceString(e)
+                )
+            }
+            previous?.uncaughtException(thread, e)
+        }
         OneDrive.init(this)
         Library.init(this)
     }
@@ -45,10 +56,28 @@ class MainActivity : ComponentActivity() {
     private var controller: MediaController? = null
     val nowPlaying = mutableStateOf(NowPlaying())
     val pickOneDriveFolder = mutableStateOf(false)
+    val crashReport = mutableStateOf<String?>(null)
+
+    /** Abre el menú de compartir de Android (WhatsApp, correo…) con el informe de error. */
+    fun shareCrash(text: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Error de Sonora")
+            .putExtra(Intent.EXTRA_TEXT, text)
+        startActivity(Intent.createChooser(send, "Compartir error"))
+    }
+
+    fun copyCrash(text: String) {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("Error de Sonora", text))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        java.io.File(filesDir, "crash.txt").takeIf { it.exists() }?.let {
+            crashReport.value = it.readText()
+            it.delete()
+        }
         setContent { SonoraUi(this) }
         handleAuth(intent)
 

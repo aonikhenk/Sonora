@@ -13,6 +13,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -124,12 +126,34 @@ fun SonoraUi(activity: MainActivity) {
             }
         }
 
+        activity.crashReport.value?.let { report ->
+            // Resumen corto: tipo de error + primeras líneas de Sonora
+            val lines = report.lines()
+            val summary = (lines.take(4) + lines.filter { "cl.zanetta" in it || it.startsWith("Caused by") }.take(6)).joinToString("\n")
+            AlertDialog(
+                onDismissRequest = { activity.crashReport.value = null },
+                title = { Text("La app se cerró") },
+                text = {
+                    Box(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                        Text("Comparte este informe para corregirlo:\n\n$summary", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    }
+                },
+                confirmButton = { TextButton(onClick = { activity.shareCrash(report) }) { Text("Compartir") } },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { activity.copyCrash(report) }) { Text("Copiar") }
+                        TextButton(onClick = { activity.crashReport.value = null }) { Text("Cerrar") }
+                    }
+                },
+            )
+        }
+
         error?.let { msg ->
             AlertDialog(
                 onDismissRequest = { Library.error.value = null },
                 confirmButton = { TextButton(onClick = { Library.error.value = null }) { Text("OK") } },
                 title = { Text("Sonora") },
-                text = { Text(msg) },
+                text = { Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(msg, fontSize = 12.sp) } },
             )
         }
     }

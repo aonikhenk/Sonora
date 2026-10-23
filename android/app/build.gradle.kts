@@ -19,8 +19,8 @@ android {
         applicationId = "cl.zanetta.sonora"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 3
+        versionName = "0.1.2"
         buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${local.getProperty("onedrive.clientId", "")}\"")
     }
 
@@ -38,8 +38,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (local.getProperty("signing.storeFile") != null) signingConfig = signingConfigs.getByName("release")
         }
