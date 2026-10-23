@@ -1,0 +1,45 @@
+{
+  "name": "sonora",
+  "productName": "Sonora",
+  "version": "0.1.0",
+  "description": "Reproductor de música minimalista: FLAC, ALAC, WAV, AIFF, MP3 con OneDrive",
+  "author": "Enrique Zanetta",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win dir --x64 && makensis -DVERSION=$npm_package_version build/installer.nsi"
+  },
+  "dependencies": {
+    "music-metadata": "^11.0.0"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "resedit": "^2.0.3"
+  },
+  "build": {
+    "appId": "cl.zanetta.sonora",
+    "productName": "Sonora",
+    "copyright": "© 2026 Enrique Zanetta",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "secrets.json",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "afterPack": "build/afterPack.js",
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}

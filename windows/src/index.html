@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: data: https:; media-src 'self' file: https: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Sonora</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="header">
+    <div class="brand">Sonora</div>
+    <div class="spacer"></div>
+    <button id="pin" class="hbtn" title="Mantener siempre encima"></button>
+    <button id="min" class="hbtn" title="Minimizar"></button>
+    <button id="close" class="hbtn close" title="Cerrar"></button>
+  </header>
+
+  <section id="art">
+    <img id="cover" alt="">
+    <div id="placeholder">
+      <img src="logo.png" alt="">
+      <p id="placeholderText">Arrastra aquí tu carpeta de música</p>
+    </div>
+    <div id="loading" hidden><div class="spinner"></div><span>Cargando…</span></div>
+    <div id="overlay">
+      <div class="top"><span id="quality" class="badge"></span></div>
+      <div class="bottom">
+        <div id="progress"><div id="progressFill"></div></div>
+        <div class="row">
+          <span id="elapsed">0:00</span>
+          <div class="controls">
+            <button id="prev" class="ctl"></button>
+            <button id="play" class="ctl big"></button>
+            <button id="next" class="ctl"></button>
+          </div>
+          <span id="remaining">-0:00</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer id="nowbar">
+    <button id="note" title="Biblioteca"></button>
+    <span id="nowTitle" class="ellipsis">—</span>
+    <span class="divider"></span>
+    <em>Siguiente:</em>
+    <span id="nextTitle" class="ellipsis">—</span>
+  </footer>
+
+  <section id="library" hidden>
+    <div id="albumsView">
+      <div class="toolbar">
+        <span class="icon search"></span>
+        <input id="search" placeholder="Buscar álbum o artista" spellcheck="false">
+        <span id="status" class="status"></span>
+        <button id="cloudBtn" class="tbtn" title="OneDrive"></button>
+        <button id="addBtn" class="tbtn" title="Agregar carpeta"></button>
+        <button id="rescanBtn" class="tbtn" title="Volver a escanear"></button>
+      </div>
+      <div id="albums" class="scroll"></div>
+      <div id="empty" class="empty" hidden>
+        <div class="icon folderplus"></div>
+        <p>Arrastra una carpeta con música sobre la ventana</p>
+        <button id="emptyOneDrive" class="link">o conecta OneDrive</button>
+      </div>
+    </div>
+    <div id="detailView" hidden></div>
+    <div id="pickerView" hidden></div>
+    <div id="menu" class="menu" hidden></div>
+  </section>
+
+  <div id="drop" hidden><div>Suelta para agregar a la biblioteca</div></div>
+  <div id="toast" hidden></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

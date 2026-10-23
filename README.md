@@ -2,9 +2,9 @@
 
 # Sonora
 
-Minimalist hi-res music player for macOS, iPhone and Android — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
+Minimalist hi-res music player for macOS, Windows, iPhone and Android — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
 
-Reproductor de música minimalista para macOS, iPhone y Android: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
+Reproductor de música minimalista para macOS, Windows, iPhone y Android: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
 
 ## Características
 
@@ -44,6 +44,10 @@ Requiere Xcode 16+ e iOS 17+.
 3. Abre `iOS/Sonora.xcodeproj`, elige tu Team en *Signing & Capabilities*, cambia el Bundle Identifier si hace falta y presiona ▶︎.
 
 Más detalles en [iOS/LEEME.md](iOS/LEEME.md).
+
+## Windows
+
+Requiere Windows 10/11 (x64). Instalador: `windows/` → `npm install && npm run dist`. Detalles en [windows/LEEME.md](windows/LEEME.md).
 
 ## Android
 
