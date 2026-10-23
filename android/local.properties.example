@@ -1,0 +1,9 @@
+# Copia este archivo a local.properties (no se sube a GitHub)
+sdk.dir=/ruta/a/Android/sdk
+# Id. de aplicación (cliente) de tu registro en Microsoft Entra
+onedrive.clientId=TU-CLIENT-ID-AQUI
+# Opcional: firma del APK de release
+#signing.storeFile=keystore.jks
+#signing.storePassword=
+#signing.keyAlias=sonora
+#signing.keyPassword=

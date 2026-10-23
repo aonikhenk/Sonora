@@ -2,21 +2,21 @@
 
 # Sonora
 
-Minimalist hi-res music player for macOS and iPhone — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
+Minimalist hi-res music player for macOS, iPhone and Android — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
 
-Reproductor de música minimalista para macOS e iPhone: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
+Reproductor de música minimalista para macOS, iPhone y Android: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
 
 ## Características
 
-| | macOS | iPhone |
-|---|---|---|
-| FLAC, ALAC, WAV, AIFF, MP3, AAC | ✓ | ✓ |
-| Etiquetas y carátulas (incluidas o `cover.jpg`) | ✓ | ✓ |
-| Biblioteca por álbumes → canciones | ✓ | ✓ |
-| Frecuencia nativa del DAC (44.1 / 96 / 192 kHz…) | ✓ | ✓ (DAC USB-C) |
-| Agregar música | arrastrar carpeta | OneDrive, iCloud Drive, copiar al iPhone |
-| Streaming desde OneDrive con caché | — | ✓ |
-| Teclas multimedia / pantalla bloqueada | ✓ | ✓ |
+| | macOS | iPhone | Android |
+|---|---|---|---|
+| FLAC, ALAC, WAV, AIFF, MP3, AAC | ✓ | ✓ | ✓ |
+| Etiquetas y carátulas | ✓ | ✓ | ✓ |
+| Biblioteca por álbumes → canciones | ✓ | ✓ | ✓ |
+| Frecuencia nativa del DAC | ✓ | ✓ (DAC USB-C) | según el equipo |
+| Agregar música | arrastrar carpeta | OneDrive, iCloud Drive, copiar | OneDrive, música del teléfono |
+| Streaming desde OneDrive con caché | — | ✓ | ✓ |
+| Controles en pantalla bloqueada | ✓ | ✓ | ✓ |
 
 ## macOS
 
@@ -42,6 +42,15 @@ Requiere Xcode 16+ e iOS 17+.
 3. Abre `iOS/Sonora.xcodeproj`, elige tu Team en *Signing & Capabilities*, cambia el Bundle Identifier si hace falta y presiona ▶︎.
 
 Más detalles en [iOS/LEEME.md](iOS/LEEME.md).
+
+## Android
+
+Requiere Android 8 o superior. Descarga el APK desde [Releases](../../releases) o compílalo:
+
+1. Copia `android/local.properties.example` a `android/local.properties` (ruta del SDK e Id. de cliente de OneDrive).
+2. `cd android && ./gradlew assembleRelease`
+
+Más detalles en [android/LEEME.md](android/LEEME.md).
 
 ## Licencia
 
