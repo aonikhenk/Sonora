@@ -1,0 +1,15 @@
+# Claves locales
+iOS/Sonora/Secrets.swift
+
+# Xcode / SwiftPM
+.build/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
