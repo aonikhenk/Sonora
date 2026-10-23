@@ -2,9 +2,9 @@
 
 # Sonora
 
-Minimalist hi-res music player for macOS, Windows, iPhone and Android — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
+Minimalist hi-res music player for macOS, Windows, iPhone, Android and Android TV — FLAC, ALAC, WAV, AIFF, with OneDrive streaming and iCloud Drive libraries.
 
-Reproductor de música minimalista para macOS, Windows, iPhone y Android: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
+Reproductor de música minimalista para macOS, Windows, iPhone, Android y Android TV: FLAC, ALAC, WAV y AIFF en alta resolución, con streaming desde OneDrive e iCloud Drive.
 
 ## Características
 
@@ -57,6 +57,11 @@ Requiere Android 8 o superior. Descarga el APK desde [Releases](../../releases) 
 2. `cd android && ./gradlew assembleRelease`
 
 Más detalles en [android/LEEME.md](android/LEEME.md).
+
+## Servicios externos (versión Android TV)
+
+- Carátulas: datos e imágenes de [Discogs](https://www.discogs.com) mediante su API.
+- Letras: [LRCLIB](https://lrclib.net), base de letras abierta y gratuita.
 
 ## Proyecto sin fines comerciales
 

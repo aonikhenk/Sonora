@@ -196,7 +196,8 @@ private fun Logo() {
 private fun rememberArtwork(albumKey: String): ImageBitmap? {
     val albums by Library.albums.collectAsState()
     val album = albums.firstOrNull { it.key == albumKey }
-    val art by produceState<ImageBitmap?>(null, album) {
+    val version by Library.artVersion.collectAsState()
+    val art by produceState<ImageBitmap?>(null, album, version) {
         value = album?.let { a -> withContext(Dispatchers.IO) { Library.artwork(a)?.asImageBitmap() } }
     }
     return art

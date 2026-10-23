@@ -316,8 +316,12 @@ object Library {
     fun artFile(key: String) = File(artDir, md5(key) + ".jpg")
 
     /** Carátula del álbum (bloqueante, usar en Dispatchers.IO). */
-    fun artwork(album: Album): Bitmap? {
-        memory.get(album.key)?.let { return it }
+    /** Versión que cambia cuando se reemplazan carátulas (la interfaz las vuelve a cargar). */
+    val artVersion = MutableStateFlow(0)
+
+    fun artwork(album: Album, maxPx: Int = 900): Bitmap? {
+        val memKey = album.key + "@" + maxPx
+        memory.get(memKey)?.let { return it }
         val f = artFile(album.key)
         if (!f.exists() && !album.isOneDrive && Build.VERSION.SDK_INT >= 29) {
             runCatching {
@@ -330,11 +334,43 @@ object Library {
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(f.path, opts)
         var sample = 1
-        while (opts.outWidth / (sample * 2) >= 900) sample *= 2
+        while (opts.outWidth / (sample * 2) >= maxPx) sample *= 2
         val bmp = BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-        memory.put(album.key, bmp)
+        memory.put(memKey, bmp)
         return bmp
     }
 
     fun album(key: String) = _albums.value.firstOrNull { it.key == key }
+
+    // MARK: Carátulas en alta resolución desde Discogs
+
+    /** Busca portadas en Discogs. all = false: solo álbumes sin carátula; true: reemplaza todas. */
+    fun fetchDiscogsCovers(all: Boolean) {
+        if (!Discogs.isConfigured || busy.value) return
+        val targets = _albums.value.filter { all || !artFile(it.key).exists() }
+        if (targets.isEmpty()) return
+        busy.value = true
+        scope.launch {
+            var found = 0
+            try {
+                withContext(Dispatchers.IO) {
+                    for ((i, a) in targets.withIndex()) {
+                        status.value = "Discogs: ${i + 1} de ${targets.size} (${found} carátulas)"
+                        val url = Discogs.coverUrl(a.artist, a.title) ?: continue
+                        if (Discogs.download(url, artFile(a.key))) {
+                            found++
+                            memory.snapshot().keys.filter { it.startsWith(a.key + "@") }.forEach { memory.remove(it) }
+                            artVersion.value++
+                        }
+                        Thread.sleep(1100)   // Discogs permite 60 consultas por minuto
+                    }
+                }
+            } catch (e: Exception) {
+                error.value = e.message
+            }
+            busy.value = false
+            status.value = ""
+            rebuild()
+        }
+    }
 }

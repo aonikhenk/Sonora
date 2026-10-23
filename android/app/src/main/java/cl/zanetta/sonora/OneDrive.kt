@@ -90,6 +90,60 @@ object OneDrive {
         }
     }
 
+    // MARK: Inicio de sesión con código (TV): se confirma desde el teléfono o el PC
+
+    data class DeviceCode(val userCode: String, val verificationUri: String, val deviceCode: String, val intervalSec: Int, val expiresAt: Long)
+
+    /** Pide un código para que el usuario inicie sesión en microsoft.com/devicelogin (bloqueante). */
+    fun startDeviceLogin(): DeviceCode {
+        val json = postForm("$AUTHORITY/devicecode", mapOf("client_id" to clientId, "scope" to SCOPES))
+        if (!json.has("device_code")) throw OneDriveException(json.optString("error_description").ifEmpty { "No se pudo obtener el código" })
+        return DeviceCode(
+            userCode = json.getString("user_code"),
+            verificationUri = json.optString("verification_uri").ifEmpty { "https://microsoft.com/devicelogin" },
+            deviceCode = json.getString("device_code"),
+            intervalSec = json.optInt("interval", 5),
+            expiresAt = System.currentTimeMillis() + json.optLong("expires_in", 900) * 1000,
+        )
+    }
+
+    /** Consulta una vez si el usuario ya aprobó el código. true = sesión iniciada; false = aún pendiente. */
+    fun pollDeviceLogin(code: DeviceCode): Boolean {
+        val json = postForm("$AUTHORITY/token", mapOf(
+            "grant_type" to "urn:ietf:params:oauth:grant-type:device_code",
+            "client_id" to clientId,
+            "device_code" to code.deviceCode,
+        ))
+        if (json.has("access_token")) {
+            accessToken = json.getString("access_token")
+            expiresAt = System.currentTimeMillis() + (json.optLong("expires_in", 3600) - 120) * 1000
+            json.optString("refresh_token").takeIf { it.isNotEmpty() }?.let { prefs.edit().putString("refresh", it).apply() }
+            runCatching {
+                val me = getJson("$GRAPH/me")
+                prefs.edit().putString("account", me.optString("userPrincipalName").ifEmpty { me.optString("displayName") }).apply()
+            }
+            return true
+        }
+        return when (json.optString("error")) {
+            "authorization_pending", "slow_down" -> false
+            "expired_token" -> throw OneDriveException("El código expiró. Vuelve a intentarlo.")
+            "authorization_declined" -> throw OneDriveException("Se canceló el inicio de sesión.")
+            else -> throw OneDriveException(json.optString("error_description").ifEmpty { "Error de inicio de sesión" })
+        }
+    }
+
+    private fun postForm(url: String, params: Map<String, String>): JSONObject {
+        val body = params.entries.joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        c.outputStream.use { it.write(body.toByteArray()) }
+        val code = c.responseCode
+        val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: "{}"
+        return runCatching { JSONObject(text) }.getOrDefault(JSONObject())
+    }
+
     fun signOut() {
         prefs.edit().clear().apply()
         accessToken = null

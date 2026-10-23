@@ -19,9 +19,10 @@ android {
         applicationId = "cl.zanetta.sonora"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.2.1"
+        versionCode = 6
+        versionName = "0.3"
         buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${local.getProperty("onedrive.clientId", "")}\"")
+        buildConfigField("String", "DISCOGS_TOKEN", "\"${local.getProperty("discogs.token", "")}\"")
     }
 
     signingConfigs {
@@ -66,6 +67,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("com.google.zxing:core:3.5.3")
 
     val media3 = "1.5.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
